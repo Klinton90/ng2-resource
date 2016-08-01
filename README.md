@@ -4,6 +4,7 @@ Simple factory based service for creating REST resources.
 
 ## Features:
 1) Provides both Observable and Promise as output parameters
+
 2) Provides basic REST commands:
  - `list()`     - get all resources
  - `get()`      - find resource by `@id` (consumes `id: number` and `id: Object` forms)
@@ -28,13 +29,15 @@ This interface defines couple properties:
  E.g. default `url` property for `get()` command is `/get/:id`. 
  But your object has `@id` property defined as `userId`. 
  Map request properties to your actual names as `propertyMapping: {"id" : "userId"}`
- 4) Each action property consumes *Angular's* 
+
+4) Each action property consumes *Angular's* 
  [RequestOptionsArgs](https://angular.io/docs/ts/latest/api/http/index/RequestOptionsArgs-interface.html) 
  object.
 
 #Quick Start
 
-Can be found in "demo" folder.
+*See "demo" folder for more information.*
+
 1) Create resources provider.
 ```
     import {ResourceConfig, provideResources} from "../resource.service";
@@ -114,4 +117,5 @@ Can be found in "demo" folder.
 
 # TODO
 1) Allow `_default` settings for each `Action`, to overwrite all requests at once.
+
 2) Allow `saveCriteria` callback for custom autodetection logic in `save()` method.
