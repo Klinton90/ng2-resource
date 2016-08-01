@@ -14,6 +14,7 @@ Simple factory based service for creating REST resources.
  E.g. `updateAction.url = "/:id"`:
     - `let data = {id: 1, name: "user1"}` - will call `update()` action as `@id` parameter has been found.
     - `let data = {userId: 2, name: "user2"}` - will call `insert()` action as `@id` parameter is missing.
+
 3) Easy and comprehensive setup. Each `Resource` in config file must provide instance of `ResourceConfig` interface.
 This interface defines couple properties:
  - `name: string;` - *required* resource name - will be used to retrieve resource from Factory.
