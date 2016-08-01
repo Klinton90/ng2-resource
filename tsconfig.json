@@ -9,5 +9,12 @@
     "removeComments": false,
     "noImplicitAny": false
   },
-  "compileOnSave": true
+  "compileOnSave": true,
+  "exclude": [
+    "node_modules"
+  ],
+  "files": [
+    "./typings/index.d.ts",
+    "./index.ts"
+  ]
 }

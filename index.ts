@@ -2,6 +2,10 @@ import {Http, RequestMethod, RequestOptionsArgs, Response} from '@angular/http';
 import {Injectable, Inject} from "@angular/core";
 import {Observable} from 'rxjs/Rx';
 
+import 'rxjs/add/operator/catch';
+import 'rxjs/add/operator/map';
+import 'rxjs/add/operator/toPromise';
+
 const providerName = "APP_RESOURCES";
 
 export class ResourceService {

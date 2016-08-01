@@ -36,8 +36,6 @@ This interface defines couple properties:
 
 #Quick Start
 
-*See "demo" folder for more information.*
-
 1) Create resources provider.
 ```
     import {ResourceConfig, provideResources} from "../resource.service";
