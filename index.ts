@@ -91,7 +91,8 @@ export class ResourceService {
     }
 
     protected _initRequest(request: RequestOptionsArgs, obj?: Object): RequestOptionsArgs{
-        let path: string = "/" + this.basePath + (request.url.startsWith("/") ? "" : "/") + request.url;
+        let _request = Object.assign({}, request);
+        let path: string = "/" + this.basePath + (_request.url.startsWith("/") ? "" : "/") + _request.url;
         if(obj){
             let parts: string[] = path.split("/");
             parts.forEach((part: string) => {
@@ -103,13 +104,13 @@ export class ResourceService {
                 }
             });
 
-            if([RequestMethod.Patch, RequestMethod.Post, RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(request.method) >= 0){
-                request.body = obj;
+            if([RequestMethod.Patch, RequestMethod.Post, RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(_request.method) >= 0){
+                _request.body = obj;
             }
         }
-        request.url = path;
+        _request.url = path;
 
-        return request;
+        return _request;
     }
 
     protected _executeRequest(request: RequestOptionsArgs): ResourceResult{

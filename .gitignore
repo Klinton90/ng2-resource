@@ -6,3 +6,4 @@
 /**/*.js.map
 /npm-debug.log
 !/systemjs.config.js
+/typings/
