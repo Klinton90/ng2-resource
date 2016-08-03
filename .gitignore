@@ -2,8 +2,8 @@
 /*.iml
 /.idea/
 /node_modules/
-/**/*.js
-/**/*.js.map
+# /**/*.js
+# /**/*.js.map
 /npm-debug.log
 !/systemjs.config.js
 /typings/
