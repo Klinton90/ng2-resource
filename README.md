@@ -3,7 +3,11 @@
 Simple factory based service for creating REST resources. 
 
 ## Features:
-1) Provides both Observable and Promise as output parameters
+1) Provides object that contains: 
+ - $o - `Observable<Response>`
+ - $d - `Observable<json>` - use it if you don't need *Response* data (e.g. status, headers)
+ - $p - `Promise<Response>`
+ - $s - `Promise<json>` - use it if you don't need *Response* data (e.g. status, headers)
 
 2) Provides basic REST commands:
  - `list()`     - get all resources
@@ -95,10 +99,11 @@ This interface defines couple properties:
             this.rf.get("user")
                 //execute request
                 .list()
-                //work with either $o - Observable
-                //or with $p - Promise
-                .$p.then((response) => {
-                    console.log(response.json());
+                //work with either Observable or Promise
+                .$s.then((data) => {
+                    //NOTE! You don't need to call `response.json()`,
+                    //as $s already returns JSONified data
+                    console.log(data);
                 });
         }
     }

@@ -114,14 +114,8 @@ export class ResourceService {
     }
 
     protected _executeRequest(request: RequestOptionsArgs): ResourceResult{
-        let o = this._http.request("", request);
-        return {
-            $o: o,
-            $p: o.toPromise().catch(response => {
-                console.log("Cannot retrieve data from specified location: '" + request.url + "'");
-                console.log(response);
-            })
-        };
+        let o: Observable<Response> = this._http.request("", request);
+        return new ResourceResult(o);
     }
 
     protected _findValueByMap(obj: Object, part: string): any{
@@ -189,9 +183,28 @@ export interface ResourceConfig{
     propertyMapping?: { [id: string]: string; }
 }
 
-export interface ResourceResult{
-    $o: Observable<any>;
-    $p: Promise<any>;
+export class ResourceResult{
+    protected _$o: Observable<Response>;
+
+    get $o(): Observable<Response>{
+        return this._$o;
+    }
+
+    get $d(): Observable<any>{
+        return this._$o.map((r: Response) => r.json());
+    }
+
+    get $p(): Promise<Response>{
+        return this._$o.toPromise();
+    }
+
+    get $s(): Promise<any>{
+        return this.$d.toPromise();
+    }
+
+    constructor($o: Observable<Response>){
+        this._$o = $o;
+    }
 }
 
 export function provideResources(config: ResourceConfig[]): any{
