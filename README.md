@@ -80,21 +80,20 @@ This interface defines couple properties:
 2) Import `ResourceFactory` and `ResourceProvider` into your app.
 ```
     //Standard imports
-    import { bootstrap }    from '@angular/platform-browser-dynamic';
-    import { HTTP_PROVIDERS } from '@angular/http';
-    import { App } from './app';
+    import {bootstrap}    from '@angular/platform-browser-dynamic';
+    import {HTTP_PROVIDERS} from '@angular/http';
+    import {App} from './app';
     //Service imports
     import {appResourcesProvider} from "./app.resources";
     
     bootstrap(<any>App, [
         HTTP_PROVIDERS,
-        ResourceFactory,
         appResourcesProvider
     ]).catch(err => console.log(err));
 ```
 3) Start using in `Components`.
 ```
-    import { Component } from '@angular/core';
+    import {Component} from '@angular/core';
     import {ResourceFactory} from "../resource.service";
     
     @Component({
@@ -105,9 +104,9 @@ This interface defines couple properties:
         protected data: string;
     
         //Inject Factory
-        constructor(){
+        constructor(rf: ResourceFactory){
             //Get Resource by 'name'
-            ResourceFactory.get("user")
+            this.rf.get("user")
                 //execute request
                 .list()
                 //work with either Observable or Promise
