@@ -21,6 +21,7 @@ var ResourceService = (function () {
     function ResourceService(_http, res) {
         this._http = _http;
         this.res = res;
+        this.isRelative = false;
         this.propertyMapping = {};
         this.listAction = {
             url: "/",
@@ -42,8 +43,19 @@ var ResourceService = (function () {
             url: "/:id",
             method: http_1.RequestMethod.Delete
         };
+        this.name = res.name;
         this.basePath = res.basePath ? res.basePath : res.name;
-        this.propertyMapping = res.propertyMapping;
+        if (res.headers) {
+            this.headers = res.headers;
+        }
+        if (res.isRelative != null) {
+            this.isRelative = res.isRelative;
+        }
+        if (res.propertyMapping) {
+            this.propertyMapping = res.propertyMapping;
+        }
+        this.requestInterceptor = res.requestInterceptor;
+        this.resultInterceptor = res.resultInterceptor;
         Object.assign(this.listAction, res.listAction);
         Object.assign(this.getAction, res.getAction);
         Object.assign(this.insertAction, res.insertAction);
@@ -51,38 +63,33 @@ var ResourceService = (function () {
         Object.assign(this.deleteAction, res.deleteAction);
     }
     ResourceService.prototype.list = function () {
-        var request = this._initRequest(this.listAction);
-        return this._executeRequest(request);
+        return this._executeRequest(this.listAction);
     };
     ResourceService.prototype.get = function (data) {
-        var obj;
-        if (typeof data == "number") {
-            obj = { id: data };
+        if (!this._isObjectOrNumber(data)) {
+            throw new Error("Data must be Object or Integer");
         }
-        else {
-            obj = data;
-        }
-        var request = this._initRequest(this.getAction, obj);
-        return this._executeRequest(request);
+        var obj = this._isNumber(data) ? { id: data } : data;
+        return this._executeRequest(this.getAction, obj);
     };
     ResourceService.prototype.delete = function (data) {
-        var obj;
-        if (typeof data == "number") {
-            obj = { id: data };
+        if (!this._isObjectOrNumber(data)) {
+            throw new Error("Data must be Object or Integer");
         }
-        else {
-            obj = data;
-        }
-        var request = this._initRequest(this.deleteAction, obj);
-        return this._executeRequest(request);
+        var obj = this._isNumber(data) ? { id: data } : data;
+        return this._executeRequest(this.deleteAction, obj);
     };
     ResourceService.prototype.insert = function (data) {
-        var request = this._initRequest(this.insertAction, data);
-        return this._executeRequest(request);
+        if (!this._isObject(data)) {
+            throw new Error("Data must be Object");
+        }
+        return this._executeRequest(this.insertAction, data);
     };
     ResourceService.prototype.update = function (data) {
-        var request = this._initRequest(this.updateAction, data);
-        return this._executeRequest(request);
+        if (!this._isObject(data)) {
+            throw new Error("Data must be Object");
+        }
+        return this._executeRequest(this.updateAction, data);
     };
     ResourceService.prototype.save = function (data) {
         if (this._isUpdateAction(data)) {
@@ -92,35 +99,60 @@ var ResourceService = (function () {
             return this.insert(data);
         }
     };
-    ResourceService.prototype._initRequest = function (request, obj) {
-        var _this = this;
+    ResourceService.prototype._executeRequest = function (request, obj) {
         var _request = Object.assign({}, request);
-        var path = "/" + this.basePath + (_request.url.startsWith("/") ? "" : "/") + _request.url;
-        if (obj) {
-            var parts = path.split("/");
-            parts.forEach(function (part) {
-                if (part.startsWith(":")) {
-                    var value = _this._findValueByMap(obj, part);
-                    if (value) {
-                        path = path.replace(part, value.toString());
-                    }
-                }
-            });
-            if ([http_1.RequestMethod.Patch, http_1.RequestMethod.Post, http_1.RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(_request.method) >= 0) {
-                _request.body = obj;
+        this._preparePath(_request, obj);
+        this._mergeHeaders(_request);
+        if (obj && [http_1.RequestMethod.Patch, http_1.RequestMethod.Post, http_1.RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(request.method) >= 0) {
+            request.body = obj;
+        }
+        if (this.requestInterceptor) {
+            _request = this.requestInterceptor(_request);
+        }
+        if (_request.requestInterceptor) {
+            _request = _request.requestInterceptor(_request);
+        }
+        var o = this._http.request("", _request);
+        var i = _request.resultInterceptor ? _request.resultInterceptor : this.resultInterceptor;
+        return new ResourceResult(o, i);
+    };
+    ResourceService.prototype._preparePath = function (request, obj) {
+        var _this = this;
+        var path = this.basePath;
+        if (this.isRelative) {
+            if (path.startsWith("/")) {
+                path = path.substring(1, path.length);
             }
         }
-        _request.url = path;
-        return _request;
-    };
-    ResourceService.prototype._executeRequest = function (request) {
-        var o = this._http.request("", request);
-        return new ResourceResult(o);
+        else {
+            if (!this.basePath.startsWith("/") && !this.basePath.startsWith("http")) {
+                path = "/" + path;
+            }
+        }
+        path += (!path.endsWith("/") && !request.url.startsWith("/") ? "/" : "") + request.url;
+        path.replace("//", "/");
+        var parts = path.split("/");
+        parts.forEach(function (part) {
+            if (part.startsWith(":")) {
+                var value = _this._findValueByMap(obj, part);
+                if (value) {
+                    path = path.replace(part, value.toString());
+                }
+                else {
+                    throw new Error("Cannot resolve parameter '" + part + "' in request '" + _this.name + "'");
+                }
+            }
+        });
+        request.url = path;
     };
     ResourceService.prototype._findValueByMap = function (obj, part) {
-        var key = part.substring(1, part.length);
-        var newKey = this.propertyMapping[key];
-        return newKey ? obj[newKey] : obj[key];
+        var result;
+        if (obj) {
+            var key = part.substring(1, part.length);
+            var newKey = this.propertyMapping[key];
+            result = newKey ? obj[newKey] : obj[key];
+        }
+        return result;
     };
     ResourceService.prototype._isUpdateAction = function (data) {
         var isUpdate = true;
@@ -129,7 +161,7 @@ var ResourceService = (function () {
             var part = parts[i];
             if (part.startsWith(":")) {
                 var value = this._findValueByMap(data, part);
-                if (!value || value.toString().length == 0) {
+                if (!value || value.toString().length == 0 || value.toString() == "0") {
                     isUpdate = false;
                     break;
                 }
@@ -137,18 +169,34 @@ var ResourceService = (function () {
         }
         return isUpdate;
     };
+    ResourceService.prototype._mergeHeaders = function (_request) {
+        if (this.headers) {
+            this.headers.forEach(function (values, name) {
+                for (var i = 0; i < values.length; i++) {
+                    _request.headers.append(name, values[i]);
+                }
+            });
+        }
+    };
+    ResourceService.prototype._isObject = function (data) {
+        return typeof data === 'object';
+    };
+    ResourceService.prototype._isNumber = function (data) {
+        return typeof data === 'number';
+    };
+    ResourceService.prototype._isObjectOrNumber = function (data) {
+        return this._isObject(data) || this._isNumber(data);
+    };
     return ResourceService;
 }());
 exports.ResourceService = ResourceService;
 var ResourceFactory = (function () {
     function ResourceFactory(http, appResources) {
         this.http = http;
-        this.resources = {};
         this.createAll(appResources);
     }
     ResourceFactory.prototype.create = function (res) {
-        var _res = new ResourceService(this.http, res);
-        this.resources[res.name] = _res;
+        ResourceFactory.resources[res.name] = new ResourceService(this.http, res);
     };
     ResourceFactory.prototype.createAll = function (resources) {
         var _this = this;
@@ -156,14 +204,15 @@ var ResourceFactory = (function () {
             _this.create(res);
         });
     };
-    ResourceFactory.prototype.get = function (name) {
-        if (this.resources[name]) {
-            return this.resources[name];
+    ResourceFactory.get = function (name) {
+        if (ResourceFactory.resources[name]) {
+            return ResourceFactory.resources[name];
         }
         else {
             throw new Error("Resource with name '" + name + "' not found!");
         }
     };
+    ResourceFactory.resources = {};
     ResourceFactory = __decorate([
         core_1.Injectable(),
         __param(1, core_1.Inject(providerName)), 
@@ -173,8 +222,9 @@ var ResourceFactory = (function () {
 }());
 exports.ResourceFactory = ResourceFactory;
 var ResourceResult = (function () {
-    function ResourceResult($o) {
+    function ResourceResult($o, $i) {
         this._$o = $o;
+        this._$i = $i;
     }
     Object.defineProperty(ResourceResult.prototype, "$o", {
         get: function () {
@@ -200,6 +250,13 @@ var ResourceResult = (function () {
     Object.defineProperty(ResourceResult.prototype, "$s", {
         get: function () {
             return this.$d.toPromise();
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(ResourceResult.prototype, "$i", {
+        get: function () {
+            return this._$i ? this._$i(this._$o) : this._$o;
         },
         enumerable: true,
         configurable: true

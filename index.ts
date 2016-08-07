@@ -1,4 +1,4 @@
-import {Http, RequestMethod, RequestOptionsArgs, Response} from '@angular/http';
+import {Http, RequestMethod, RequestOptionsArgs, Response, URLSearchParams, Headers} from '@angular/http';
 import {Injectable, Inject} from "@angular/core";
 import {Observable} from 'rxjs/Rx';
 
@@ -8,34 +8,51 @@ import 'rxjs/add/operator/toPromise';
 
 const providerName = "APP_RESOURCES";
 
-export class ResourceService {
+export class ResourceService implements ResourceConfig{
 
+    public name: string;
     public basePath: string;
-    protected propertyMapping: { [id: string]: string; } = {};
-    protected listAction: RequestOptionsArgs = {
+    public headers: Headers;
+    public isRelative: boolean = false;
+    public propertyMapping: { [id: string]: string; } = {};
+    public requestInterceptor: RequestInterceptor;
+    public resultInterceptor: ResultInterceptor;
+
+    public listAction: RequestAction = {
         url: "/",
         method: RequestMethod.Get
     };
-    protected getAction: RequestOptionsArgs = {
+    public getAction: RequestAction = {
         url: "/:id",
         method: RequestMethod.Get
     };
-    protected insertAction: RequestOptionsArgs = {
+    public insertAction: RequestAction = {
         url: "/",
         method: RequestMethod.Post
     };
-    protected updateAction: RequestOptionsArgs = {
+    public updateAction: RequestAction = {
         url: "/:id",
         method: RequestMethod.Put
     };
-    protected deleteAction: RequestOptionsArgs = {
+    public deleteAction: RequestAction = {
         url: "/:id",
         method: RequestMethod.Delete
     };
 
     constructor(protected _http: Http, protected res: ResourceConfig){
+        this.name = res.name;
         this.basePath = res.basePath ? res.basePath : res.name;
-        this.propertyMapping = res.propertyMapping;
+        if(res.headers){
+            this.headers = res.headers;
+        }
+        if(res.isRelative != null){
+            this.isRelative = res.isRelative;
+        }
+        if(res.propertyMapping){
+            this.propertyMapping = res.propertyMapping;
+        }
+        this.requestInterceptor = res.requestInterceptor;
+        this.resultInterceptor = res.resultInterceptor;
         Object.assign(this.listAction, res.listAction);
         Object.assign(this.getAction, res.getAction);
         Object.assign(this.insertAction, res.insertAction);
@@ -44,42 +61,39 @@ export class ResourceService {
     }
 
     public list(): ResourceResult{
-        let request: RequestOptionsArgs = this._initRequest(this.listAction);
-        return this._executeRequest(request);
+        return this._executeRequest(this.listAction);
     }
 
     public get(data: Object): ResourceResult;
     public get(data: number): ResourceResult{
-        let obj: {};
-        if(typeof data == "number"){
-            obj = {id: data};
-        }else{
-            obj = data;
+        if(!this._isObjectOrNumber(data)){
+            throw new Error("Data must be Object or Integer");
         }
-        let request: RequestOptionsArgs = this._initRequest(this.getAction, obj);
-        return this._executeRequest(request);
+        let obj = this._isNumber(data) ? {id: data} : data;
+        return this._executeRequest(this.getAction, obj);
     }
 
     public delete(data: Object): ResourceResult;
     public delete(data: number): ResourceResult{
-        let obj: {};
-        if(typeof data == "number"){
-            obj = {id: data};
-        }else{
-            obj = data;
+        if(!this._isObjectOrNumber(data)){
+            throw new Error("Data must be Object or Integer");
         }
-        let request: RequestOptionsArgs = this._initRequest(this.deleteAction, obj);
-        return this._executeRequest(request);
+        let obj = this._isNumber(data) ? {id: data} : data;
+        return this._executeRequest(this.deleteAction, obj);
     }
 
     public insert(data: Object): ResourceResult{
-        let request: RequestOptionsArgs = this._initRequest(this.insertAction, data);
-        return this._executeRequest(request);
+        if(!this._isObject(data)){
+            throw new Error("Data must be Object");
+        }
+        return this._executeRequest(this.insertAction, data);
     }
 
     public update(data: Object): ResourceResult{
-        let request: RequestOptionsArgs = this._initRequest(this.updateAction, data);
-        return this._executeRequest(request);
+        if(!this._isObject(data)){
+            throw new Error("Data must be Object");
+        }
+        return this._executeRequest(this.updateAction, data);
     }
 
     public save(data: Object): ResourceResult{
@@ -90,39 +104,63 @@ export class ResourceService {
         }
     }
 
-    protected _initRequest(request: RequestOptionsArgs, obj?: Object): RequestOptionsArgs{
-        let _request = Object.assign({}, request);
-        let path: string = "/" + this.basePath + (_request.url.startsWith("/") ? "" : "/") + _request.url;
-        if(obj){
-            let parts: string[] = path.split("/");
-            parts.forEach((part: string) => {
-                if(part.startsWith(":")){
-                    let value: any = this._findValueByMap(obj, part);
-                    if(value){
-                        path = path.replace(part, value.toString());
-                    }
-                }
-            });
+    protected _executeRequest(request: RequestAction, obj?: Object): ResourceResult{
+        let _request: RequestAction = Object.assign({}, request);
 
-            if([RequestMethod.Patch, RequestMethod.Post, RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(_request.method) >= 0){
-                _request.body = obj;
-            }
+        this._preparePath(_request, obj);
+        this._mergeHeaders(_request);
+        if(obj && [RequestMethod.Patch, RequestMethod.Post, RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(request.method) >= 0){
+            request.body = obj;
         }
-        _request.url = path;
+        if(this.requestInterceptor){
+            _request = this.requestInterceptor(_request);
+        }
+        if(_request.requestInterceptor){
+            _request = _request.requestInterceptor(_request);
+        }
 
-        return _request;
+        let o: Observable<Response> = this._http.request("", _request);
+        let i: ResultInterceptor = _request.resultInterceptor ? _request.resultInterceptor : this.resultInterceptor;
+        return new ResourceResult(o, i);
     }
 
-    protected _executeRequest(request: RequestOptionsArgs): ResourceResult{
-        let o: Observable<Response> = this._http.request("", request);
-        return new ResourceResult(o);
+    protected _preparePath(request: RequestAction, obj?: Object): void{
+        let path: string = this.basePath;
+        if(this.isRelative){
+            if(path.startsWith("/")){
+                path = path.substring(1, path.length);
+            }
+        }else{
+            if(!this.basePath.startsWith("/") && !this.basePath.startsWith("http")){
+                path = "/" + path;
+            }
+        }
+        path += (!path.endsWith("/") && !request.url.startsWith("/") ? "/" : "") + request.url;
+        path.replace("//", "/");
+
+        let parts: string[] = path.split("/");
+        parts.forEach((part: string) => {
+            if(part.startsWith(":")){
+                let value: any = this._findValueByMap(obj, part);
+                if(value){
+                    path = path.replace(part, value.toString());
+                }else{
+                    throw new Error("Cannot resolve parameter '" + part + "' in request '" + this.name + "'");
+                }
+            }
+        });
+
+        request.url = path;
     }
 
     protected _findValueByMap(obj: Object, part: string): any{
-        let key: string = part.substring(1, part.length);
-        let newKey: string = this.propertyMapping[key];
-
-        return newKey ? obj[newKey] : obj[key];
+        let result: any;
+        if(obj){
+            let key: string = part.substring(1, part.length);
+            let newKey: string = this.propertyMapping[key];
+            result = newKey ? obj[newKey] : obj[key];
+        }
+        return result;
     }
 
     protected _isUpdateAction(data: Object): boolean{
@@ -132,7 +170,7 @@ export class ResourceService {
             let part: string = parts[i];
             if(part.startsWith(":")){
                 let value: any = this._findValueByMap(data, part);
-                if(!value || value.toString().length == 0){
+                if(!value || value.toString().length == 0 || value.toString() == "0"){
                     isUpdate = false;
                     break;
                 }
@@ -141,20 +179,41 @@ export class ResourceService {
 
         return isUpdate;
     }
+
+    protected _mergeHeaders(_request: RequestAction): void{
+        if(this.headers){
+            this.headers.forEach((values: string[], name: string) => {
+                for(let i = 0; i < values.length; i++){
+                    _request.headers.append(name, values[i]);
+                }
+            });
+        }
+    }
+
+    protected _isObject(data: any): boolean{
+        return typeof data === 'object';
+    }
+
+    protected _isNumber(data: any): boolean{
+        return typeof data === 'number';
+    }
+
+    protected _isObjectOrNumber(data: any): boolean{
+        return this._isObject(data) || this._isNumber(data);
+    }
 }
 
 @Injectable()
 export class ResourceFactory{
 
-    protected resources: { [id: string]: ResourceService; } = {};
+    protected static resources: { [id: string]: ResourceService; } = {};
 
     constructor(public http: Http, @Inject(providerName) appResources: ResourceConfig[]){
         this.createAll(appResources);
     }
 
     public create(res: ResourceConfig){
-        let _res = new ResourceService(this.http, res);
-        this.resources[res.name] = _res;
+        ResourceFactory.resources[res.name] = new ResourceService(this.http, res);
     }
 
     public createAll(resources: ResourceConfig[]){
@@ -163,28 +222,47 @@ export class ResourceFactory{
         });
     }
 
-    public get(name: string): ResourceService{
-        if(this.resources[name]){
-            return this.resources[name];
+    public static get(name: string): ResourceService{
+        if(ResourceFactory.resources[name]){
+            return ResourceFactory.resources[name];
         }else{
             throw new Error("Resource with name '" + name + "' not found!");
         }
     }
 }
 
+export interface RequestInterceptor{
+    (request: RequestOptionsArgs): RequestOptionsArgs;
+}
+
+export interface ResultInterceptor{
+    (o: Observable<Response>): Observable<any>;
+}
+
+export interface RequestAction extends RequestOptionsArgs{
+    requestInterceptor?: RequestInterceptor;
+    resultInterceptor?: ResultInterceptor;
+}
+
 export interface ResourceConfig{
     name: string;
     basePath?: string;
-    listAction?: RequestOptionsArgs;
-    getAction?: RequestOptionsArgs;
-    insertAction?: RequestOptionsArgs;
-    updateAction?: RequestOptionsArgs;
-    deleteAction?: RequestOptionsArgs;
-    propertyMapping?: { [id: string]: string; }
+    headers?: Headers;
+    isRelative?: boolean;
+    listAction?: RequestAction;
+    getAction?: RequestAction;
+    insertAction?: RequestAction;
+    updateAction?: RequestAction;
+    deleteAction?: RequestAction;
+    propertyMapping?: { [id: string]: string; };
+    requestInterceptor?: RequestInterceptor;
+    resultInterceptor?: ResultInterceptor;
 }
 
 export class ResourceResult{
     protected _$o: Observable<Response>;
+
+    protected _$i: ResultInterceptor;
 
     get $o(): Observable<Response>{
         return this._$o;
@@ -202,8 +280,13 @@ export class ResourceResult{
         return this.$d.toPromise();
     }
 
-    constructor($o: Observable<Response>){
+    get $i(): Observable<any>{
+        return this._$i ? this._$i(this._$o) : this._$o;
+    }
+
+    constructor($o: Observable<Response>, $i?: ResultInterceptor){
         this._$o = $o;
+        this._$i = $i;
     }
 }
 
