@@ -291,5 +291,8 @@ export class ResourceResult{
 }
 
 export function provideResources(config: ResourceConfig[]): any{
-    return {provide: providerName, useValue: config};
+    return [
+        {provide: providerName, useValue: config},
+        ResourceFactory
+    ];
 }

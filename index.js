@@ -265,7 +265,10 @@ var ResourceResult = (function () {
 }());
 exports.ResourceResult = ResourceResult;
 function provideResources(config) {
-    return { provide: providerName, useValue: config };
+    return [
+        { provide: providerName, useValue: config },
+        ResourceFactory
+    ];
 }
 exports.provideResources = provideResources;
 //# sourceMappingURL=index.js.map

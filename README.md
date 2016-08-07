@@ -53,6 +53,7 @@ This interface defines couple properties:
 
 1) Create resources provider.
 ```
+    //need this import for 'provideResources()' method
     import {ResourceConfig, provideResources} from "../resource.service";
     
     const appResources: ResourceConfig[] = [
@@ -83,7 +84,6 @@ This interface defines couple properties:
     import { HTTP_PROVIDERS } from '@angular/http';
     import { App } from './app';
     //Service imports
-    import {ResourceFactory} from "../resource.service";
     import {appResourcesProvider} from "./app.resources";
     
     bootstrap(<any>App, [
@@ -105,9 +105,9 @@ This interface defines couple properties:
         protected data: string;
     
         //Inject Factory
-        constructor(protected rf: ResourceFactory){
+        constructor(){
             //Get Resource by 'name'
-            this.rf.get("user")
+            ResourceFactory.get("user")
                 //execute request
                 .list()
                 //work with either Observable or Promise
