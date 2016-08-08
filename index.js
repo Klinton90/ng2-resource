@@ -193,10 +193,11 @@ exports.ResourceService = ResourceService;
 var ResourceFactory = (function () {
     function ResourceFactory(http, appResources) {
         this.http = http;
+        this.resources = {};
         this.createAll(appResources);
     }
     ResourceFactory.prototype.create = function (res) {
-        ResourceFactory.resources[res.name] = new ResourceService(this.http, res);
+        this.resources[res.name] = new ResourceService(this.http, res);
     };
     ResourceFactory.prototype.createAll = function (resources) {
         var _this = this;
@@ -204,15 +205,14 @@ var ResourceFactory = (function () {
             _this.create(res);
         });
     };
-    ResourceFactory.get = function (name) {
-        if (ResourceFactory.resources[name]) {
-            return ResourceFactory.resources[name];
+    ResourceFactory.prototype.get = function (name) {
+        if (this.resources[name]) {
+            return this.resources[name];
         }
         else {
             throw new Error("Resource with name '" + name + "' not found!");
         }
     };
-    ResourceFactory.resources = {};
     ResourceFactory = __decorate([
         core_1.Injectable(),
         __param(1, core_1.Inject(providerName)), 

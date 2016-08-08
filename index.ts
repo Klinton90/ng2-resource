@@ -206,14 +206,14 @@ export class ResourceService implements ResourceConfig{
 @Injectable()
 export class ResourceFactory{
 
-    protected static resources: { [id: string]: ResourceService; } = {};
+    protected resources: { [id: string]: ResourceService; } = {};
 
     constructor(public http: Http, @Inject(providerName) appResources: ResourceConfig[]){
         this.createAll(appResources);
     }
 
     public create(res: ResourceConfig){
-        ResourceFactory.resources[res.name] = new ResourceService(this.http, res);
+        this.resources[res.name] = new ResourceService(this.http, res);
     }
 
     public createAll(resources: ResourceConfig[]){
@@ -222,9 +222,9 @@ export class ResourceFactory{
         });
     }
 
-    public static get(name: string): ResourceService{
-        if(ResourceFactory.resources[name]){
-            return ResourceFactory.resources[name];
+    public get(name: string): ResourceService{
+        if(this.resources[name]){
+            return this.resources[name];
         }else{
             throw new Error("Resource with name '" + name + "' not found!");
         }
