@@ -16,7 +16,7 @@ var core_1 = require("@angular/core");
 require('rxjs/add/operator/catch');
 require('rxjs/add/operator/map');
 require('rxjs/add/operator/toPromise');
-var providerName = "APP_RESOURCES";
+exports.RESOURCES_PROVIDER_NAME = "APP_RESOURCES";
 var ResourceService = (function () {
     function ResourceService(_http, res) {
         this._http = _http;
@@ -215,7 +215,7 @@ var ResourceFactory = (function () {
     };
     ResourceFactory = __decorate([
         core_1.Injectable(),
-        __param(1, core_1.Inject(providerName)), 
+        __param(1, core_1.Inject(exports.RESOURCES_PROVIDER_NAME)), 
         __metadata('design:paramtypes', [http_1.Http, Array])
     ], ResourceFactory);
     return ResourceFactory;
@@ -266,7 +266,7 @@ var ResourceResult = (function () {
 exports.ResourceResult = ResourceResult;
 function provideResources(config) {
     return [
-        { provide: providerName, useValue: config },
+        { provide: exports.RESOURCES_PROVIDER_NAME, useValue: config },
         ResourceFactory
     ];
 }

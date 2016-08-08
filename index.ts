@@ -6,7 +6,7 @@ import 'rxjs/add/operator/catch';
 import 'rxjs/add/operator/map';
 import 'rxjs/add/operator/toPromise';
 
-const providerName = "APP_RESOURCES";
+export const RESOURCES_PROVIDER_NAME = "APP_RESOURCES";
 
 export class ResourceService implements ResourceConfig{
 
@@ -208,7 +208,7 @@ export class ResourceFactory{
 
     protected resources: { [id: string]: ResourceService; } = {};
 
-    constructor(public http: Http, @Inject(providerName) appResources: ResourceConfig[]){
+    constructor(public http: Http, @Inject(RESOURCES_PROVIDER_NAME) appResources: ResourceConfig[]){
         this.createAll(appResources);
     }
 
@@ -292,7 +292,7 @@ export class ResourceResult{
 
 export function provideResources(config: ResourceConfig[]): any{
     return [
-        {provide: providerName, useValue: config},
+        {provide: RESOURCES_PROVIDER_NAME, useValue: config},
         ResourceFactory
     ];
 }
