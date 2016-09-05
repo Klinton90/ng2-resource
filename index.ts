@@ -110,7 +110,7 @@ export class ResourceService implements ResourceConfig{
         this._preparePath(_request, obj);
         this._mergeHeaders(_request);
         if(obj && [RequestMethod.Patch, RequestMethod.Post, RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(request.method) >= 0){
-            request.body = obj;
+            _request.body = obj;
         }
         if(this.requestInterceptor){
             _request = this.requestInterceptor(_request);
