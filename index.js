@@ -104,7 +104,7 @@ var ResourceService = (function () {
         this._preparePath(_request, obj);
         this._mergeHeaders(_request);
         if (obj && [http_1.RequestMethod.Patch, http_1.RequestMethod.Post, http_1.RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(request.method) >= 0) {
-            request.body = obj;
+            _request.body = obj;
         }
         if (this.requestInterceptor) {
             _request = this.requestInterceptor(_request);
