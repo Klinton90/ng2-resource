@@ -17,6 +17,7 @@ require('rxjs/add/operator/catch');
 require('rxjs/add/operator/map');
 require('rxjs/add/operator/toPromise');
 exports.RESOURCES_PROVIDER_NAME = "APP_RESOURCES";
+exports.DEFAULT_RESOURCE_NAME = "DEFAULT";
 var ResourceService = (function () {
     function ResourceService(_http, res) {
         this._http = _http;
@@ -197,10 +198,26 @@ var ResourceFactory = (function () {
         this.createAll(appResources);
     }
     ResourceFactory.prototype.create = function (res) {
-        this.resources[res.name] = new ResourceService(this.http, res);
+        if (res.name == exports.DEFAULT_RESOURCE_NAME) {
+            this.defaultConfig = res;
+        }
+        else {
+            if (this.defaultConfig != null) {
+                var newRes = Object.assign({}, this.defaultConfig);
+                res = Object.assign(newRes, res);
+            }
+            this.resources[res.name] = new ResourceService(this.http, res);
+        }
     };
     ResourceFactory.prototype.createAll = function (resources) {
         var _this = this;
+        var defaultConfigInd = resources.findIndex(function (value) {
+            return value.name == exports.DEFAULT_RESOURCE_NAME;
+        });
+        if (defaultConfigInd > -1) {
+            this.defaultConfig = resources[defaultConfigInd];
+            resources.splice(defaultConfigInd, 1);
+        }
         resources.forEach(function (res) {
             _this.create(res);
         });

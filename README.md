@@ -49,6 +49,9 @@ This interface defines couple properties:
  - `resultInterceptor?: ResultInterceptor;` - Callback that will be executed when `resource.$i` property is used.
  Only one Interceptor will be executed: either on Resource or Action level. Action Interceptor has higher priority.
 
+5) Default settings. You can setup default settings resource that will be used for each created resource,
+in case it doesn't  have own property.
+
 #Quick Start
 
 1) Create resources provider.
@@ -79,17 +82,20 @@ This interface defines couple properties:
 ```
 2) Import `ResourceFactory` and `ResourceProvider` into your app.
 ```
-    //Standard imports
-    import {bootstrap}    from '@angular/platform-browser-dynamic';
-    import {HTTP_PROVIDERS} from '@angular/http';
-    import {App} from './app';
-    //Service imports
-    import {appResourcesProvider} from "./app.resources";
-    
-    bootstrap(<any>App, [
-        HTTP_PROVIDERS,
-        appResourcesProvider
-    ]).catch(err => console.log(err));
+    @NgModule({
+        declarations: [
+            AppComponent,
+        ],
+        imports: [
+            BrowserModule,
+            HttpModule,
+        ],
+        providers: [
+            appResourcesProvider
+        ],
+        bootstrap: [AppComponent],
+    })
+    export class AppModule {}
 ```
 3) Start using in `Components`.
 ```
@@ -191,4 +197,79 @@ request.$i.subscribe(
         console.log(err);
     }
 );
+```
+
+# Default setting and Dependency Injection example
+
+1) Let's assume I need "router" dependency in my ResultInterceptor. 
+So I have to provide resources as `class` with own dependency
+```
+import {ResourceConfig, DEFAULT_RESOURCE_NAME} from "ng2-resource";
+
+@Injectable()
+export class AppResources{
+    constructor(protected router: Router){};                        //Set dependency to 'Router'
+
+    public getResources(): ResourceConfig[]{
+        return [
+            //We have 2 resources with restricted access (authentication and authorization are backend tasks).
+            {
+                name: "user"
+            },
+            {
+                name: "order"
+            },
+            //We can implement shared redirection logic in case of unauthorized requests using default settings
+            {
+                name: DEFAULT_RESOURCE_NAME,                        //That property has been improted from 'ng2-resource'
+                resultInterceptor: (o: Observable<Response>) =>{
+                    let _o = o.share();
+                    _o.subscribe(null, (err: Response) =>{
+                        if(err.status == 401){
+                            NotificationService.postMessage("Please login.", "Unauthenticated", 3000); //Custom NotificationService to provide feedback for user
+                            this.router.navigate(["/login"]);       //Here we are using 'ng2-router' for redirection handling
+                        }else if(err.status == 403){
+                            NotificationService.postMessage("You do not have sufficient permissions for that action.", "Not authorized", 3000);
+                            this.router.navigate(["/"]);
+                        }else{
+                            NotificationService.postMessage("Problems on server. Please try again later.", "Error", 3000);
+                            this.router.navigate(["/"]);
+                        }
+                    });
+                    return _o.map((r: Response) =>{
+                        return r.json()
+                    });
+                }
+            }
+        ]
+    };
+}
+```
+
+2) Module import schema changed a bit. That implementation allows using standard ng2 dependency injection in your Interceptors
+```
+import {ResourceFactory, RESOURCES_PROVIDER_NAME} from "ng2-resource";
+
+@NgModule({
+        declarations: [
+            AppComponent,
+        ],
+        imports: [
+            BrowserModule,
+            HttpModule,
+        ],
+        providers: [
+            AppResources,                           //Imported Resources class implemented above
+            ResourceFactory,                        //Imported ResourceFactory
+            {
+                provide: RESOURCES_PROVIDER_NAME,   //That property has been improted from 'ng2-resource'
+                deps: [AppResources],               //Set dependency to Resources class. Instance of that class will be provided into "useFactory"
+                useFactory: (ar) => {               //Use factory
+                    return ar.getResources()        //Call factory method, where 'ar' is instance of 'AppResources'
+                }
+            }
+        ],
+        bootstrap: [AppComponent],
+    })
+    export class AppModule {}
 ```

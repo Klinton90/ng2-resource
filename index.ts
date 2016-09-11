@@ -7,6 +7,7 @@ import 'rxjs/add/operator/map';
 import 'rxjs/add/operator/toPromise';
 
 export const RESOURCES_PROVIDER_NAME = "APP_RESOURCES";
+export const DEFAULT_RESOURCE_NAME = "DEFAULT";
 
 export class ResourceService implements ResourceConfig{
 
@@ -207,16 +208,32 @@ export class ResourceService implements ResourceConfig{
 export class ResourceFactory{
 
     protected resources: { [id: string]: ResourceService; } = {};
+    public defaultConfig: ResourceConfig;
 
     constructor(public http: Http, @Inject(RESOURCES_PROVIDER_NAME) appResources: ResourceConfig[]){
         this.createAll(appResources);
     }
 
     public create(res: ResourceConfig){
-        this.resources[res.name] = new ResourceService(this.http, res);
+        if(res.name == DEFAULT_RESOURCE_NAME){
+            this.defaultConfig = res;
+        }else{
+            if(this.defaultConfig != null){
+                let newRes = Object.assign({}, this.defaultConfig);
+                res = Object.assign(newRes, res);
+            }
+            this.resources[res.name] = new ResourceService(this.http, res);
+        }
     }
 
     public createAll(resources: ResourceConfig[]){
+        let defaultConfigInd: number = resources.findIndex((value: ResourceConfig) => {
+            return value.name == DEFAULT_RESOURCE_NAME;
+        });
+        if(defaultConfigInd > -1){
+            this.defaultConfig = resources[defaultConfigInd];
+            resources.splice(defaultConfigInd, 1);
+        }
         resources.forEach((res: ResourceConfig) => {
             this.create(res);
         });
