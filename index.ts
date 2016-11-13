@@ -61,52 +61,58 @@ export class ResourceService implements ResourceConfig{
         Object.assign(this.deleteAction, res.deleteAction);
     }
 
-    public list(): ResourceResult{
-        return this._executeRequest(this.listAction);
+    public list(overrides?: RequestAction): ResourceResult{
+        return this._executeRequest(this.listAction, null, overrides);
     }
 
-    public get(data: Object): ResourceResult;
-    public get(data: number): ResourceResult{
+    public get(data: Object, overrides?: RequestAction): ResourceResult;
+    public get(data: number, overrides?: RequestAction): ResourceResult{
         if(!this._isObjectOrNumber(data)){
             throw new Error("Data must be Object or Integer");
         }
         let obj = this._isNumber(data) ? {id: data} : data;
-        return this._executeRequest(this.getAction, obj);
+        return this._executeRequest(this.getAction, obj, overrides);
     }
 
-    public delete(data: Object): ResourceResult;
-    public delete(data: number): ResourceResult{
+    public delete(data: Object, overrides?: RequestAction): ResourceResult;
+    public delete(data: number, overrides?: RequestAction): ResourceResult{
         if(!this._isObjectOrNumber(data)){
             throw new Error("Data must be Object or Integer");
         }
         let obj = this._isNumber(data) ? {id: data} : data;
-        return this._executeRequest(this.deleteAction, obj);
+        return this._executeRequest(this.deleteAction, obj, overrides);
     }
 
-    public insert(data: Object): ResourceResult{
+    public insert(data: Object, overrides?: RequestAction): ResourceResult{
         if(!this._isObject(data)){
             throw new Error("Data must be Object");
         }
-        return this._executeRequest(this.insertAction, data);
+        return this._executeRequest(this.insertAction, data, overrides);
     }
 
-    public update(data: Object): ResourceResult{
+    public update(data: Object, overrides?: RequestAction): ResourceResult{
         if(!this._isObject(data)){
             throw new Error("Data must be Object");
         }
-        return this._executeRequest(this.updateAction, data);
+        return this._executeRequest(this.updateAction, data, overrides);
     }
 
-    public save(data: Object): ResourceResult{
+    public save(data: Object, overrides?: RequestAction): ResourceResult{
         if(this._isUpdateAction(data)){
-            return this.update(data);
+            return this.update(data, overrides);
         }else{
-            return this.insert(data);
+            return this.insert(data, overrides);
         }
     }
 
-    protected _executeRequest(request: RequestAction, obj?: Object): ResourceResult{
-        let _request: RequestAction = Object.assign({}, request);
+    protected _executeRequest(request: RequestAction, obj?: Object, overrides?: RequestAction): ResourceResult{
+        let _request: RequestAction;
+        if(overrides){
+            _request = Object.assign({}, overrides);
+            _request = Object.assign(_request, request);
+        }else{
+            _request = Object.assign({}, request);
+        }
 
         this._preparePath(_request, obj);
         this._mergeHeaders(_request);

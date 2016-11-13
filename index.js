@@ -63,45 +63,52 @@ var ResourceService = (function () {
         Object.assign(this.updateAction, res.updateAction);
         Object.assign(this.deleteAction, res.deleteAction);
     }
-    ResourceService.prototype.list = function () {
-        return this._executeRequest(this.listAction);
+    ResourceService.prototype.list = function (overrides) {
+        return this._executeRequest(this.listAction, null, overrides);
     };
-    ResourceService.prototype.get = function (data) {
+    ResourceService.prototype.get = function (data, overrides) {
         if (!this._isObjectOrNumber(data)) {
             throw new Error("Data must be Object or Integer");
         }
         var obj = this._isNumber(data) ? { id: data } : data;
-        return this._executeRequest(this.getAction, obj);
+        return this._executeRequest(this.getAction, obj, overrides);
     };
-    ResourceService.prototype.delete = function (data) {
+    ResourceService.prototype.delete = function (data, overrides) {
         if (!this._isObjectOrNumber(data)) {
             throw new Error("Data must be Object or Integer");
         }
         var obj = this._isNumber(data) ? { id: data } : data;
-        return this._executeRequest(this.deleteAction, obj);
+        return this._executeRequest(this.deleteAction, obj, overrides);
     };
-    ResourceService.prototype.insert = function (data) {
+    ResourceService.prototype.insert = function (data, overrides) {
         if (!this._isObject(data)) {
             throw new Error("Data must be Object");
         }
-        return this._executeRequest(this.insertAction, data);
+        return this._executeRequest(this.insertAction, data, overrides);
     };
-    ResourceService.prototype.update = function (data) {
+    ResourceService.prototype.update = function (data, overrides) {
         if (!this._isObject(data)) {
             throw new Error("Data must be Object");
         }
-        return this._executeRequest(this.updateAction, data);
+        return this._executeRequest(this.updateAction, data, overrides);
     };
-    ResourceService.prototype.save = function (data) {
+    ResourceService.prototype.save = function (data, overrides) {
         if (this._isUpdateAction(data)) {
-            return this.update(data);
+            return this.update(data, overrides);
         }
         else {
-            return this.insert(data);
+            return this.insert(data, overrides);
         }
     };
-    ResourceService.prototype._executeRequest = function (request, obj) {
-        var _request = Object.assign({}, request);
+    ResourceService.prototype._executeRequest = function (request, obj, overrides) {
+        var _request;
+        if (overrides) {
+            _request = Object.assign({}, overrides);
+            _request = Object.assign(_request, request);
+        }
+        else {
+            _request = Object.assign({}, request);
+        }
         this._preparePath(_request, obj);
         this._mergeHeaders(_request);
         if (obj && [http_1.RequestMethod.Patch, http_1.RequestMethod.Post, http_1.RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(request.method) >= 0) {

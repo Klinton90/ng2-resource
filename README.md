@@ -11,15 +11,18 @@ Simple factory based service for creating REST resources.
  - $i - `Observable<any>` - use it for getting processed response via `ResultInterceptor`
 
 2) Provides basic REST commands:
- - `list()`     - get all resources
- - `get()`      - find resource by `@id` (consumes `id: number` and `id: Object` forms)
- - `insert()`   - create new resource
- - `update()`   - update existing resource
- - `delete()`   - delete existing resource (consumes `id: number` and `id: Object` forms)
- - `save()`     - create or update resource. Autodetection is based on all generic request parameters provided for *updateAction*. 
+ - `list(overrides?: RequestAction)`     - get all resources
+ - `get(id: number | Object, overrides?: RequestAction)`      - find resource by `@id` (consumes `id: number` and `id: Object` forms)
+ - `insert(data: Object, overrides?: RequestAction)`   - create new resource
+ - `update(data: Object, overrides?: RequestAction)`   - update existing resource
+ - `delete(id: number | Object, overrides?: RequestAction)`   - delete existing resource (consumes `id: number` and `id: Object` forms)
+ - `save(data: Object, overrides?: RequestAction)`     - create or update resource. Autodetection is based on all generic request parameters provided for *updateAction*. 
  E.g. `updateAction.url = "/:id"`:
     - `let data = {id: 1, name: "user1"}` - will call `update()` action as `@id` parameter has been found.
     - `let data = {userId: 2, name: "user2"}` - will call `insert()` action as `@id` parameter is missing.
+    
+Every method accepts `overrides?: RequestAction` property. That is last chance for updating request parameters. 
+For example, you can pass `search` string that will be added to current request only. That is useful for grid pagination or filtering.
 
 3) Easy and comprehensive setup. Each `Resource` in config file must provide instance of `ResourceConfig` interface.
 This interface defines couple properties:
@@ -246,7 +249,7 @@ export class AppResources{
 }
 ```
 
-2) Module import schema changed a bit. That implementation allows using standard ng2 dependency injection in your Interceptors
+2) Import Module like described below. That allows using ng2 dependency injection in Interceptors.
 ```
 import {ResourceFactory, RESOURCES_PROVIDER_NAME} from "ng2-resource";
 
