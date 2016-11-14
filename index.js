@@ -101,13 +101,9 @@ var ResourceService = (function () {
         }
     };
     ResourceService.prototype._executeRequest = function (request, obj, overrides) {
-        var _request;
+        var _request = Object.assign({}, request);
         if (overrides) {
-            _request = Object.assign({}, overrides);
-            _request = Object.assign(_request, request);
-        }
-        else {
-            _request = Object.assign({}, request);
+            _request = Object.assign(_request, overrides);
         }
         this._preparePath(_request, obj);
         this._mergeHeaders(_request);

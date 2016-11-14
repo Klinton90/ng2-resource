@@ -106,12 +106,9 @@ export class ResourceService implements ResourceConfig{
     }
 
     protected _executeRequest(request: RequestAction, obj?: Object, overrides?: RequestAction): ResourceResult{
-        let _request: RequestAction;
+        let _request: RequestAction = Object.assign({}, request);
         if(overrides){
-            _request = Object.assign({}, overrides);
-            _request = Object.assign(_request, request);
-        }else{
-            _request = Object.assign({}, request);
+            _request = Object.assign(_request, overrides);
         }
 
         this._preparePath(_request, obj);
