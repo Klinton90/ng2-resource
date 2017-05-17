@@ -6,8 +6,9 @@ import 'rxjs/add/operator/catch';
 import 'rxjs/add/operator/map';
 import 'rxjs/add/operator/toPromise';
 
-export const RESOURCES_PROVIDER_NAME = "APP_RESOURCES";
-export const DEFAULT_RESOURCE_NAME = "DEFAULT";
+export const RESOURCES_PROVIDER_NAME = "RESOURCES_PROVIDER_NAME";
+export const DEFAULT_RESOURCE_NAME = "DEFAULT_RESOURCE_NAME";
+export const MERGE_RESOURCE_NAME = "MERGE_RESOURCE_NAME";
 
 export class ResourceService implements ResourceConfig{
 
@@ -15,7 +16,7 @@ export class ResourceService implements ResourceConfig{
     public basePath: string;
     public headers: Headers;
     public isRelative: boolean = false;
-    public propertyMapping: { [id: string]: string; } = {};
+    public propertyMapping: Map<string, string> = new Map<string, string>();
     public requestInterceptor: RequestInterceptor;
     public resultInterceptor: ResultInterceptor;
 
@@ -42,7 +43,7 @@ export class ResourceService implements ResourceConfig{
 
     constructor(protected _http: Http, protected res: ResourceConfig){
         this.name = res.name;
-        this.basePath = res.basePath ? res.basePath : res.name;
+        this.basePath = res.basePath == null ? res.name : res.basePath;
         if(res.headers){
             this.headers = res.headers;
         }
@@ -105,14 +106,15 @@ export class ResourceService implements ResourceConfig{
         }
     }
 
+    public request(request: RequestAction, obj?: Object): ResourceResult{
+        return this._executeRequest(request, obj);
+    }
+
     protected _executeRequest(request: RequestAction, obj?: Object, overrides?: RequestAction): ResourceResult{
-        let _request: RequestAction = Object.assign({}, request);
-        if(overrides){
-            _request = Object.assign(_request, overrides);
-        }
+        let _request: RequestAction = Object.assign({}, request, overrides);
 
         this._preparePath(_request, obj);
-        this._mergeHeaders(_request);
+        ResourceService.mergeHeaders(this, _request);
         if(obj && [RequestMethod.Patch, RequestMethod.Post, RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(request.method) >= 0){
             _request.body = obj;
         }
@@ -121,6 +123,10 @@ export class ResourceService implements ResourceConfig{
         }
         if(_request.requestInterceptor){
             _request = _request.requestInterceptor(_request);
+        }
+
+        if(_request.method == null){
+            throw Error("Request parameter `method` is required.");
         }
 
         let o: Observable<Response> = this._http.request("", _request);
@@ -184,11 +190,11 @@ export class ResourceService implements ResourceConfig{
         return isUpdate;
     }
 
-    protected _mergeHeaders(_request: RequestAction): void{
-        if(this.headers){
-            this.headers.forEach((values: string[], name: string) => {
+    public static mergeHeaders(from: RequestAction, to: RequestAction): void{
+        if(from.headers){
+            from.headers.forEach((values: string[], name: string) => {
                 for(let i = 0; i < values.length; i++){
-                    _request.headers.append(name, values[i]);
+                    to.headers.append(name, values[i]);
                 }
             });
         }
@@ -210,33 +216,41 @@ export class ResourceService implements ResourceConfig{
 @Injectable()
 export class ResourceFactory{
 
-    protected resources: { [id: string]: ResourceService; } = {};
+    protected resources: Map<string, ResourceService> = new Map<string, ResourceService>();
     public defaultConfig: ResourceConfig;
+    public mergeConfig: ResourceConfig;
 
     constructor(public http: Http, @Inject(RESOURCES_PROVIDER_NAME) appResources: ResourceConfig[]){
         this.createAll(appResources);
     }
 
-    public create(res: ResourceConfig){
-        if(res.name == DEFAULT_RESOURCE_NAME){
-            this.defaultConfig = res;
-        }else{
-            if(this.defaultConfig != null){
-                let newRes = Object.assign({}, this.defaultConfig);
-                res = Object.assign(newRes, res);
-            }
-            this.resources[res.name] = new ResourceService(this.http, res);
-        }
+    public create(res: ResourceConfig): void{
+        let _res = this.defaultConfig != null ? Object.assign({}, this.defaultConfig, res) : res;
+        this.resources[res.name] = new ResourceService(this.http, _res);
     }
 
-    public createAll(resources: ResourceConfig[]){
-        let defaultConfigInd: number = resources.findIndex((value: ResourceConfig) => {
+    public createAll(resources: ResourceConfig[]): void{
+        let mergeConfigIndex: number = resources.findIndex((value: ResourceConfig) => {
+            return value.name == MERGE_RESOURCE_NAME;
+        });
+        if(mergeConfigIndex > -1){
+            this.mergeConfig = resources[mergeConfigIndex];
+            this.mergeConfig.basePath = this.mergeConfig.basePath == null ? "" : this.mergeConfig.basePath;
+            resources.splice(mergeConfigIndex, 1);
+            this.resources[MERGE_RESOURCE_NAME] = new ResourceService(this.http, this.mergeConfig);
+        }
+
+        let defaultConfigIndex: number = resources.findIndex((value: ResourceConfig) => {
             return value.name == DEFAULT_RESOURCE_NAME;
         });
-        if(defaultConfigInd > -1){
-            this.defaultConfig = resources[defaultConfigInd];
-            resources.splice(defaultConfigInd, 1);
+        if(defaultConfigIndex > -1){
+            this.defaultConfig = resources[defaultConfigIndex];
+            this.defaultConfig.basePath = this.defaultConfig.basePath == null ? "" : this.defaultConfig.basePath;
+            resources.splice(defaultConfigIndex, 1);
+            ResourceFactory._mergeConfig(this.mergeConfig, this.defaultConfig);
+            this.resources[DEFAULT_RESOURCE_NAME] = new ResourceService(this.http, this.defaultConfig);
         }
+
         resources.forEach((res: ResourceConfig) => {
             this.create(res);
         });
@@ -249,6 +263,90 @@ export class ResourceFactory{
             throw new Error("Resource with name '" + name + "' not found!");
         }
     }
+
+    private static _mergeConfig(from: ResourceConfig, to: ResourceConfig): void{
+        if(from){
+            ResourceFactory._replaceParam(from, to, "basePath");
+            ResourceFactory._replaceParam(from, to, "isRelative");
+
+            ResourceFactory._mergeAction(from.listAction, to.listAction);
+            ResourceFactory._mergeAction(from.getAction, to.getAction);
+            ResourceFactory._mergeAction(from.insertAction, to.insertAction);
+            ResourceFactory._mergeAction(from.updateAction, to.updateAction);
+            ResourceFactory._mergeAction(from.deleteAction, to.deleteAction);
+
+            ResourceService.mergeHeaders(from, to);
+            ResourceFactory._copyRequestInterceptor(from, to);
+            ResourceFactory._copyResultInterceptor(from, to);
+
+            if(from.propertyMapping){
+                if(to.propertyMapping == null){
+                    to.propertyMapping = from.propertyMapping;
+                }else{
+                    to.propertyMapping = Object.assign({}, from.propertyMapping, to.propertyMapping);
+                }
+            }
+        }
+    }
+
+    private static _mergeAction(from: RequestAction, to: RequestAction): void{
+        if(from){
+            ResourceFactory._replaceParam(from, to, "url");
+            ResourceFactory._replaceParam(from, to, "method");
+            ResourceFactory._replaceParam(from, to, "withCredentials");
+            ResourceFactory._replaceParam(from, to, "responseType");
+            //cannot properly merge `body, as type is `any`
+            ResourceFactory._replaceParam(from, to, "body");
+
+            ResourceService.mergeHeaders(from, to);
+            ResourceFactory._copyRequestInterceptor(from, to);
+            ResourceFactory._copyResultInterceptor(from, to);
+
+            if(from.params != null){
+                if(to.params == null){
+                    to.params = from.params;
+                }else{
+                    if(to.params instanceof URLSearchParams && from.params instanceof URLSearchParams){
+                        (<URLSearchParams>to.params).appendAll(from.params);
+                    }else if(to.params instanceof Map && from.params instanceof Map){
+                        to.params = Object.assign({}, from.params, to.params);
+                    }
+                }
+            }
+        }
+    }
+
+    private static _replaceParam(from: any, to: any, param: string): void{
+        to[param] = to[param] == null && from[param] != null ? to[param] : from[param];
+    }
+
+    private static _copyRequestInterceptor(from: ResourceConfig | RequestAction, to: ResourceConfig | RequestAction){
+        if(from.requestInterceptor != null){
+            if(to.requestInterceptor == null){
+                to.requestInterceptor = from.requestInterceptor;
+            }else{
+                let copy = to.requestInterceptor;
+                to.requestInterceptor = function(request: RequestOptionsArgs): RequestOptionsArgs{
+                    request = from.requestInterceptor(request);
+                    return copy(request);
+                }
+            }
+        }
+    }
+
+    private static _copyResultInterceptor(from: ResourceConfig | RequestAction, to: ResourceConfig | RequestAction){
+        if(from.resultInterceptor != null){
+            if(to.resultInterceptor == null){
+                to.resultInterceptor = from.resultInterceptor;
+            }else{
+                let copy = to.resultInterceptor;
+                to.resultInterceptor = function(o: Observable<Response>): Observable<any>{
+                    return copy(from.resultInterceptor(o));
+                }
+            }
+        }
+    }
+
 }
 
 export interface RequestInterceptor{
@@ -274,7 +372,7 @@ export interface ResourceConfig{
     insertAction?: RequestAction;
     updateAction?: RequestAction;
     deleteAction?: RequestAction;
-    propertyMapping?: { [id: string]: string; };
+    propertyMapping?: Map<string, string>;
     requestInterceptor?: RequestInterceptor;
     resultInterceptor?: ResultInterceptor;
 }
@@ -282,13 +380,13 @@ export interface ResourceConfig{
 export class ResourceResult{
     protected _$o: Observable<Response>;
 
-    protected _$i: ResultInterceptor;
+    protected _interceptor: ResultInterceptor;
 
     get $o(): Observable<Response>{
         return this._$o;
     }
 
-    get $d(): Observable<any>{
+    get $od(): Observable<any>{
         return this._$o.map((r: Response) => r.json());
     }
 
@@ -296,17 +394,21 @@ export class ResourceResult{
         return this._$o.toPromise();
     }
 
-    get $s(): Promise<any>{
-        return this.$d.toPromise();
+    get $pd(): Promise<any>{
+        return this.$od.toPromise();
     }
 
-    get $i(): Observable<any>{
-        return this._$i ? this._$i(this._$o) : this._$o;
+    get $oi(): Observable<any>{
+        return this._interceptor ? this._interceptor(this._$o) : this._$o;
     }
 
-    constructor($o: Observable<Response>, $i?: ResultInterceptor){
-        this._$o = $o;
-        this._$i = $i;
+    get $pi(): Promise<any>{
+        return this.$oi.toPromise();
+    }
+
+    constructor($o: Observable<Response>, interceptor?: ResultInterceptor){
+        this._$o = $o.share();
+        this._interceptor = interceptor;
     }
 }
 

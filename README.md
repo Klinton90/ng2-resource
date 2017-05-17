@@ -5,18 +5,20 @@ Simple factory based service for creating REST resources.
 ## Features:
 1) Provides object that contains: 
  - $o - `Observable<Response>`
- - $d - `Observable<json>` - use it if you don't need *Response* data (e.g. status, headers)
+ - $od - `Observable<json>` - use it if you don't need *Response* data (e.g. status, headers) (_read as "Observable Data"_)
  - $p - `Promise<Response>`
- - $s - `Promise<json>` - use it if you don't need *Response* data (e.g. status, headers)
- - $i - `Observable<any>` - use it for getting processed response via `ResultInterceptor`
+ - $pd - `Promise<json>` - use it if you don't need *Response* data (e.g. status, headers) (_read as "Promise Data"_)
+ - $oi - `Observable<any>` - use it for getting processed response via `ResultInterceptor` (_read as "Observable Intercepted"_)
+ - $pi - `Promise<any>` - use it for getting processed response via `ResultInterceptor` (_read as "Promise Intercepted"_)
 
 2) Provides basic REST commands:
- - `list(overrides?: RequestAction)`     - get all resources
- - `get(id: number | Object, overrides?: RequestAction)`      - find resource by `@id` (consumes `id: number` and `id: Object` forms)
- - `insert(data: Object, overrides?: RequestAction)`   - create new resource
- - `update(data: Object, overrides?: RequestAction)`   - update existing resource
- - `delete(id: number | Object, overrides?: RequestAction)`   - delete existing resource (consumes `id: number` and `id: Object` forms)
- - `save(data: Object, overrides?: RequestAction)`     - create or update resource. Autodetection is based on all generic request parameters provided for *updateAction*. 
+ - `request(request: RequestAction, obj?: Object)` - execute fully customizable request
+ - `list(overrides?: RequestAction)` - get all resources
+ - `get(id: number | Object, overrides?: RequestAction)` - find resource by `@id` (consumes `id: number` and `id: Object` forms)
+ - `insert(data: Object, overrides?: RequestAction)` - create new resource
+ - `update(data: Object, overrides?: RequestAction)` - update existing resource
+ - `delete(id: number | Object, overrides?: RequestAction)` - delete existing resource (consumes `id: number` and `id: Object` forms)
+ - `save(data: Object, overrides?: RequestAction)` - create or update resource. Autodetection is based on all generic request parameters provided for *updateAction*. 
  E.g. `updateAction.url = "/:id"`:
     - `let data = {id: 1, name: "user1"}` - will call `update()` action as `@id` parameter has been found.
     - `let data = {userId: 2, name: "user2"}` - will call `insert()` action as `@id` parameter is missing.
@@ -41,7 +43,7 @@ This interface defines couple properties:
   Map request properties to your actual names as `propertyMapping: {"id" : "userId"}`
  - `requestInterceptor?: RequestInterceptor;` - Callback that will be executed for every Request. Individual action also
  could have `requestInterceptor`, then both will be executed.
- - `resultInterceptor?: ResultInterceptor;` - Callback that will be executed when `resource.$i` property is used.
+ - `resultInterceptor?: ResultInterceptor;` - Callback that will be executed when `resource.$oi` property is used.
  Only one Interceptor will be executed: either on Resource or Action level. Action Interceptor has higher priority.
 
 4) Each action property consumes *Angular's* 
@@ -49,11 +51,15 @@ This interface defines couple properties:
  object. With couple additional options:
  - `requestInterceptor?: RequestInterceptor;` - Callback that will be executed for every Request.
  When interceptor is provided for Resource and Action, both will be executed.
- - `resultInterceptor?: ResultInterceptor;` - Callback that will be executed when `resource.$i` property is used.
+ - `resultInterceptor?: ResultInterceptor;` - Callback that will be executed when `resource.$oi` property is used.
  Only one Interceptor will be executed: either on Resource or Action level. Action Interceptor has higher priority.
 
 5) Default settings. You can setup default settings resource that will be used for each created resource,
-in case it doesn't  have own property.
+in case it doesn't  have own property. Note! You can use these resources for request execution.
+ - `DEFAULT_RESOURCE_NAME` - if resource implementation has own value - use it, 
+ otherwise take configuration from default resource
+ - `MERGE_RESOURCE_NAME` - will be merged to all defined resources. Useful when you need to provide `Headers`
+ or `interceptor`s that has to be called for all requests, but there is also resource specific logic exists.
 
 #Quick Start
 
@@ -119,9 +125,9 @@ in case it doesn't  have own property.
                 //execute request
                 .list()
                 //work with either Observable or Promise
-                .$s.then((data) => {
+                .$pd.then((data) => {
                     //NOTE! You don't need to call `response.json()`,
-                    //as $s already returns JSONified data
+                    //as $pd already returns JSONified data
                     console.log(data);
                 });
         }
@@ -154,9 +160,9 @@ request.$o
     }
 );
 ```
-2) $d - `Observable<json>` - use it if you don't need *Response* data (e.g. status, headers)
+2) $do - `Observable<json>` - use it if you don't need *Response* data (e.g. status, headers)
 ```
-request.$d.subscribe(
+request.$do.subscribe(
     (data) => {
         console.log(data); //data = {id: '1', name: 'Klinton'}
     },
@@ -174,15 +180,15 @@ request.$p.then(data => { //data = {_body: "{id: '1', name: 'Klinton'}", status:
     console.log(data);
 });
 ```
-4) $s - `Promise<json>` - use it if you don't need *Response* data (e.g. status, headers)
+4) $pd - `Promise<json>` - use it if you don't need *Response* data (e.g. status, headers)
 ```
-request.$s.then(data => {
+request.$pd.then(data => {
     console.log(data) //data = {id: '1', name: 'Klinton'}
 }).catch(q => {
     console.log(data);
 });
 ```
-5) $i - `Observable<any>` - use it for getting processed response via `ResultInterceptor`
+5) $oi - `Observable<any>` - use it for getting processed response via `ResultInterceptor`
 ```
 let userResource = ResourceFactory.get('user');
 userResource.resultInterceptor = (o: Observable<Response>) => {
@@ -192,7 +198,7 @@ userResource.resultInterceptor = (o: Observable<Response>) => {
         return result;
     });
 };
-request.$i.subscribe(
+request.$oi.subscribe(
     (data) => {
         console.log(data); //data = {id: '1', name: 'Klinton', status: 'Ok'}
     },
@@ -200,6 +206,22 @@ request.$i.subscribe(
         console.log(err);
     }
 );
+```
+6) $pi - `Promise<any>` - use it for getting processed response via `ResultInterceptor`
+```
+let userResource = ResourceFactory.get('user');
+userResource.resultInterceptor = (o: Observable<Response>) => {
+    return o.map((data: Response) => { //data = {_body: "{id: '1', name: 'Klinton'}", status: 200, ok: true, statusText: "OK", headers: Headers…}
+        let result = data.json();
+        result.status = 'Ok';
+        return result;
+    });
+};
+request.$pi.then((data) => {
+    console.log(data); //data = {id: '1', name: 'Klinton', status: 'Ok'}
+}).catch((err) => {
+    console.log(err);
+});
 ```
 
 # Default setting and Dependency Injection example
