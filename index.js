@@ -179,6 +179,7 @@ var ResourceService = (function () {
     };
     ResourceService.mergeHeaders = function (from, to) {
         if (from.headers) {
+            to.headers = to.headers || new http_1.Headers();
             from.headers.forEach(function (values, name) {
                 for (var i = 0; i < values.length; i++) {
                     to.headers.append(name, values[i]);
@@ -206,7 +207,11 @@ var ResourceFactory = ResourceFactory_1 = (function () {
     }
     ResourceFactory.prototype.create = function (res) {
         var _res = this.defaultConfig != null ? Object.assign({}, this.defaultConfig, res) : res;
-        this.resources[res.name] = new ResourceService(this.http, _res);
+        var service = new ResourceService(this.http, _res);
+        if (this.mergeConfig.basePath) {
+            service.basePath = this.mergeConfig.basePath + service.basePath;
+        }
+        this.resources[res.name] = service;
     };
     ResourceFactory.prototype.createAll = function (resources) {
         var _this = this;
@@ -215,19 +220,25 @@ var ResourceFactory = ResourceFactory_1 = (function () {
         });
         if (mergeConfigIndex > -1) {
             this.mergeConfig = resources[mergeConfigIndex];
-            this.mergeConfig.basePath = this.mergeConfig.basePath == null ? "" : this.mergeConfig.basePath;
+            var _mergeConfig = Object.assign({}, this.mergeConfig);
+            _mergeConfig.basePath = _mergeConfig.basePath == null ? "" : _mergeConfig.basePath;
             resources.splice(mergeConfigIndex, 1);
-            this.resources[exports.MERGE_RESOURCE_NAME] = new ResourceService(this.http, this.mergeConfig);
+            this.resources[exports.MERGE_RESOURCE_NAME] = new ResourceService(this.http, _mergeConfig);
         }
         var defaultConfigIndex = resources.findIndex(function (value) {
             return value.name == exports.DEFAULT_RESOURCE_NAME;
         });
         if (defaultConfigIndex > -1) {
             this.defaultConfig = resources[defaultConfigIndex];
-            this.defaultConfig.basePath = this.defaultConfig.basePath == null ? "" : this.defaultConfig.basePath;
             resources.splice(defaultConfigIndex, 1);
             ResourceFactory_1._mergeConfig(this.mergeConfig, this.defaultConfig);
-            this.resources[exports.DEFAULT_RESOURCE_NAME] = new ResourceService(this.http, this.defaultConfig);
+            var _defaultConfig = Object.assign({}, this.defaultConfig);
+            _defaultConfig.basePath = _defaultConfig.basePath == null ? "" : _defaultConfig.basePath;
+            var service = new ResourceService(this.http, _defaultConfig);
+            if (this.mergeConfig.basePath) {
+                service.basePath = this.mergeConfig.basePath + service.basePath;
+            }
+            this.resources[exports.DEFAULT_RESOURCE_NAME] = service;
         }
         resources.forEach(function (res) {
             _this.create(res);
@@ -243,7 +254,6 @@ var ResourceFactory = ResourceFactory_1 = (function () {
     };
     ResourceFactory._mergeConfig = function (from, to) {
         if (from) {
-            ResourceFactory_1._replaceParam(from, to, "basePath");
             ResourceFactory_1._replaceParam(from, to, "isRelative");
             ResourceFactory_1._mergeAction(from.listAction, to.listAction);
             ResourceFactory_1._mergeAction(from.getAction, to.getAction);

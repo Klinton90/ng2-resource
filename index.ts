@@ -192,6 +192,7 @@ export class ResourceService implements ResourceConfig{
 
     public static mergeHeaders(from: RequestAction, to: RequestAction): void{
         if(from.headers){
+            to.headers = to.headers || new Headers();
             from.headers.forEach((values: string[], name: string) => {
                 for(let i = 0; i < values.length; i++){
                     to.headers.append(name, values[i]);
@@ -226,7 +227,11 @@ export class ResourceFactory{
 
     public create(res: ResourceConfig): void{
         let _res = this.defaultConfig != null ? Object.assign({}, this.defaultConfig, res) : res;
-        this.resources[res.name] = new ResourceService(this.http, _res);
+        let service: ResourceService = new ResourceService(this.http, _res);
+        if(this.mergeConfig.basePath){
+            service.basePath = this.mergeConfig.basePath + service.basePath;
+        }
+        this.resources[res.name] = service;
     }
 
     public createAll(resources: ResourceConfig[]): void{
@@ -235,9 +240,10 @@ export class ResourceFactory{
         });
         if(mergeConfigIndex > -1){
             this.mergeConfig = resources[mergeConfigIndex];
-            this.mergeConfig.basePath = this.mergeConfig.basePath == null ? "" : this.mergeConfig.basePath;
+            let _mergeConfig = Object.assign({}, this.mergeConfig);
+            _mergeConfig.basePath = _mergeConfig.basePath == null ? "" : _mergeConfig.basePath;
             resources.splice(mergeConfigIndex, 1);
-            this.resources[MERGE_RESOURCE_NAME] = new ResourceService(this.http, this.mergeConfig);
+            this.resources[MERGE_RESOURCE_NAME] = new ResourceService(this.http, _mergeConfig);
         }
 
         let defaultConfigIndex: number = resources.findIndex((value: ResourceConfig) => {
@@ -245,10 +251,17 @@ export class ResourceFactory{
         });
         if(defaultConfigIndex > -1){
             this.defaultConfig = resources[defaultConfigIndex];
-            this.defaultConfig.basePath = this.defaultConfig.basePath == null ? "" : this.defaultConfig.basePath;
             resources.splice(defaultConfigIndex, 1);
             ResourceFactory._mergeConfig(this.mergeConfig, this.defaultConfig);
-            this.resources[DEFAULT_RESOURCE_NAME] = new ResourceService(this.http, this.defaultConfig);
+
+            let _defaultConfig = Object.assign({}, this.defaultConfig);
+            _defaultConfig.basePath = _defaultConfig.basePath == null ? "" : _defaultConfig.basePath;
+
+            let service: ResourceService =new ResourceService(this.http, _defaultConfig);
+            if(this.mergeConfig.basePath){
+                service.basePath = this.mergeConfig.basePath + service.basePath;
+            }
+            this.resources[DEFAULT_RESOURCE_NAME] = service;
         }
 
         resources.forEach((res: ResourceConfig) => {
@@ -266,7 +279,6 @@ export class ResourceFactory{
 
     private static _mergeConfig(from: ResourceConfig, to: ResourceConfig): void{
         if(from){
-            ResourceFactory._replaceParam(from, to, "basePath");
             ResourceFactory._replaceParam(from, to, "isRelative");
 
             ResourceFactory._mergeAction(from.listAction, to.listAction);
