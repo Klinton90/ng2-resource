@@ -18,12 +18,13 @@ require("rxjs/add/operator/map");
 require("rxjs/add/operator/toPromise");
 exports.RESOURCES_PROVIDER_NAME = "RESOURCES_PROVIDER_NAME";
 exports.DEFAULT_RESOURCE_NAME = "DEFAULT_RESOURCE_NAME";
-exports.MERGE_RESOURCE_NAME = "MERGE_RESOURCE_NAME";
+exports.BASE_RESOURCE_NAME = "BASE_RESOURCE_NAME";
 var ResourceService = (function () {
     function ResourceService(_http, res) {
         this._http = _http;
         this.res = res;
         this.isRelative = false;
+        this.withCredentials = false;
         this.propertyMapping = new Map();
         this.listAction = {
             url: "/",
@@ -52,6 +53,9 @@ var ResourceService = (function () {
         }
         if (res.isRelative != null) {
             this.isRelative = res.isRelative;
+        }
+        if (res.withCredentials != null) {
+            this.withCredentials = res.withCredentials;
         }
         if (res.propertyMapping) {
             this.propertyMapping = res.propertyMapping;
@@ -106,7 +110,10 @@ var ResourceService = (function () {
     };
     ResourceService.prototype._executeRequest = function (request, obj, overrides) {
         var _request = Object.assign({}, request, overrides);
-        this._preparePath(_request, obj);
+        if (_request.method == null) {
+            throw Error("Request parameter `method` is required.");
+        }
+        _request.url = this._preparePath(_request, obj);
         ResourceService.mergeHeaders(this, _request);
         if (obj && [http_1.RequestMethod.Patch, http_1.RequestMethod.Post, http_1.RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(request.method) >= 0) {
             _request.body = obj;
@@ -117,8 +124,8 @@ var ResourceService = (function () {
         if (_request.requestInterceptor) {
             _request = _request.requestInterceptor(_request);
         }
-        if (_request.method == null) {
-            throw Error("Request parameter `method` is required.");
+        if (_request.withCredentials == null && this.withCredentials) {
+            _request.withCredentials = this.withCredentials;
         }
         var o = this._http.request("", _request);
         var i = _request.resultInterceptor ? _request.resultInterceptor : this.resultInterceptor;
@@ -127,6 +134,9 @@ var ResourceService = (function () {
     ResourceService.prototype._preparePath = function (request, obj) {
         var _this = this;
         var path = this.basePath;
+        var url = request.url;
+        path.replace("\\", "/");
+        url.replace("\\", "/");
         if (this.isRelative) {
             if (path.startsWith("/")) {
                 path = path.substring(1, path.length);
@@ -137,7 +147,7 @@ var ResourceService = (function () {
                 path = "/" + path;
             }
         }
-        path += (!path.endsWith("/") && !request.url.startsWith("/") ? "/" : "") + request.url;
+        path += (!path.endsWith("/") && !url.startsWith("/") ? "/" : "") + url;
         path.replace("//", "/");
         var parts = path.split("/");
         parts.forEach(function (part) {
@@ -151,7 +161,7 @@ var ResourceService = (function () {
                 }
             }
         });
-        request.url = path;
+        return path;
     };
     ResourceService.prototype._findValueByMap = function (obj, part) {
         var result;
@@ -208,22 +218,20 @@ var ResourceFactory = ResourceFactory_1 = (function () {
     ResourceFactory.prototype.create = function (res) {
         var _res = this.defaultConfig != null ? Object.assign({}, this.defaultConfig, res) : res;
         var service = new ResourceService(this.http, _res);
-        if (this.mergeConfig.basePath) {
-            service.basePath = this.mergeConfig.basePath + service.basePath;
-        }
+        this._mergeBasePath(service);
         this.resources[res.name] = service;
     };
     ResourceFactory.prototype.createAll = function (resources) {
         var _this = this;
         var mergeConfigIndex = resources.findIndex(function (value) {
-            return value.name == exports.MERGE_RESOURCE_NAME;
+            return value.name == exports.BASE_RESOURCE_NAME;
         });
         if (mergeConfigIndex > -1) {
-            this.mergeConfig = resources[mergeConfigIndex];
-            var _mergeConfig = Object.assign({}, this.mergeConfig);
-            _mergeConfig.basePath = _mergeConfig.basePath == null ? "" : _mergeConfig.basePath;
+            this.baseConfig = resources[mergeConfigIndex];
+            var _baseConfig = Object.assign({}, this.baseConfig);
+            _baseConfig.basePath = _baseConfig.basePath == null ? "" : _baseConfig.basePath;
             resources.splice(mergeConfigIndex, 1);
-            this.resources[exports.MERGE_RESOURCE_NAME] = new ResourceService(this.http, _mergeConfig);
+            this.resources[exports.BASE_RESOURCE_NAME] = new ResourceService(this.http, _baseConfig);
         }
         var defaultConfigIndex = resources.findIndex(function (value) {
             return value.name == exports.DEFAULT_RESOURCE_NAME;
@@ -231,13 +239,11 @@ var ResourceFactory = ResourceFactory_1 = (function () {
         if (defaultConfigIndex > -1) {
             this.defaultConfig = resources[defaultConfigIndex];
             resources.splice(defaultConfigIndex, 1);
-            ResourceFactory_1._mergeConfig(this.mergeConfig, this.defaultConfig);
+            ResourceFactory_1._mergeConfig(this.baseConfig, this.defaultConfig);
             var _defaultConfig = Object.assign({}, this.defaultConfig);
             _defaultConfig.basePath = _defaultConfig.basePath == null ? "" : _defaultConfig.basePath;
             var service = new ResourceService(this.http, _defaultConfig);
-            if (this.mergeConfig.basePath) {
-                service.basePath = this.mergeConfig.basePath + service.basePath;
-            }
+            this._mergeBasePath(service);
             this.resources[exports.DEFAULT_RESOURCE_NAME] = service;
         }
         resources.forEach(function (res) {
@@ -252,9 +258,17 @@ var ResourceFactory = ResourceFactory_1 = (function () {
             throw new Error("Resource with name '" + name + "' not found!");
         }
     };
+    ResourceFactory.prototype._mergeBasePath = function (service) {
+        if (this.baseConfig.basePath) {
+            this.baseConfig.basePath.replace("\\", "/");
+            var separator = !service.basePath.startsWith("/") && !this.baseConfig.basePath.endsWith("/") ? "/" : "";
+            service.basePath = this.baseConfig.basePath + separator + service.basePath;
+        }
+    };
     ResourceFactory._mergeConfig = function (from, to) {
         if (from) {
             ResourceFactory_1._replaceParam(from, to, "isRelative");
+            ResourceFactory_1._replaceParam(from, to, "withCredentials");
             ResourceFactory_1._mergeAction(from.listAction, to.listAction);
             ResourceFactory_1._mergeAction(from.getAction, to.getAction);
             ResourceFactory_1._mergeAction(from.insertAction, to.insertAction);
@@ -300,7 +314,7 @@ var ResourceFactory = ResourceFactory_1 = (function () {
         }
     };
     ResourceFactory._replaceParam = function (from, to, param) {
-        to[param] = to[param] == null && from[param] != null ? to[param] : from[param];
+        to[param] = to[param] == null && from[param] != null ? from[param] : to[param];
     };
     ResourceFactory._copyRequestInterceptor = function (from, to) {
         if (from.requestInterceptor != null) {

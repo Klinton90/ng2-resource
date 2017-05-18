@@ -8,7 +8,7 @@ import 'rxjs/add/operator/toPromise';
 
 export const RESOURCES_PROVIDER_NAME = "RESOURCES_PROVIDER_NAME";
 export const DEFAULT_RESOURCE_NAME = "DEFAULT_RESOURCE_NAME";
-export const MERGE_RESOURCE_NAME = "MERGE_RESOURCE_NAME";
+export const BASE_RESOURCE_NAME = "BASE_RESOURCE_NAME";
 
 export class ResourceService implements ResourceConfig{
 
@@ -16,6 +16,7 @@ export class ResourceService implements ResourceConfig{
     public basePath: string;
     public headers: Headers;
     public isRelative: boolean = false;
+    public withCredentials: boolean = false;
     public propertyMapping: Map<string, string> = new Map<string, string>();
     public requestInterceptor: RequestInterceptor;
     public resultInterceptor: ResultInterceptor;
@@ -49,6 +50,9 @@ export class ResourceService implements ResourceConfig{
         }
         if(res.isRelative != null){
             this.isRelative = res.isRelative;
+        }
+        if(res.withCredentials != null){
+            this.withCredentials = res.withCredentials;
         }
         if(res.propertyMapping){
             this.propertyMapping = res.propertyMapping;
@@ -113,7 +117,11 @@ export class ResourceService implements ResourceConfig{
     protected _executeRequest(request: RequestAction, obj?: Object, overrides?: RequestAction): ResourceResult{
         let _request: RequestAction = Object.assign({}, request, overrides);
 
-        this._preparePath(_request, obj);
+        if(_request.method == null){
+            throw Error("Request parameter `method` is required.");
+        }
+
+        _request.url = this._preparePath(_request, obj);
         ResourceService.mergeHeaders(this, _request);
         if(obj && [RequestMethod.Patch, RequestMethod.Post, RequestMethod.Put, "PATCH", "POST", "PUT"].indexOf(request.method) >= 0){
             _request.body = obj;
@@ -124,9 +132,8 @@ export class ResourceService implements ResourceConfig{
         if(_request.requestInterceptor){
             _request = _request.requestInterceptor(_request);
         }
-
-        if(_request.method == null){
-            throw Error("Request parameter `method` is required.");
+        if(_request.withCredentials == null && this.withCredentials){
+            _request.withCredentials = this.withCredentials;
         }
 
         let o: Observable<Response> = this._http.request("", _request);
@@ -134,8 +141,11 @@ export class ResourceService implements ResourceConfig{
         return new ResourceResult(o, i);
     }
 
-    protected _preparePath(request: RequestAction, obj?: Object): void{
+    protected _preparePath(request: RequestAction, obj?: Object): string{
         let path: string = this.basePath;
+        let url: string = request.url;
+        path.replace("\\", "/");
+        url.replace("\\", "/");
         if(this.isRelative){
             if(path.startsWith("/")){
                 path = path.substring(1, path.length);
@@ -145,7 +155,7 @@ export class ResourceService implements ResourceConfig{
                 path = "/" + path;
             }
         }
-        path += (!path.endsWith("/") && !request.url.startsWith("/") ? "/" : "") + request.url;
+        path += (!path.endsWith("/") && !url.startsWith("/") ? "/" : "") + url;
         path.replace("//", "/");
 
         let parts: string[] = path.split("/");
@@ -160,7 +170,7 @@ export class ResourceService implements ResourceConfig{
             }
         });
 
-        request.url = path;
+        return path;
     }
 
     protected _findValueByMap(obj: Object, part: string): any{
@@ -219,7 +229,7 @@ export class ResourceFactory{
 
     protected resources: Map<string, ResourceService> = new Map<string, ResourceService>();
     public defaultConfig: ResourceConfig;
-    public mergeConfig: ResourceConfig;
+    public baseConfig: ResourceConfig;
 
     constructor(public http: Http, @Inject(RESOURCES_PROVIDER_NAME) appResources: ResourceConfig[]){
         this.createAll(appResources);
@@ -228,22 +238,20 @@ export class ResourceFactory{
     public create(res: ResourceConfig): void{
         let _res = this.defaultConfig != null ? Object.assign({}, this.defaultConfig, res) : res;
         let service: ResourceService = new ResourceService(this.http, _res);
-        if(this.mergeConfig.basePath){
-            service.basePath = this.mergeConfig.basePath + service.basePath;
-        }
+        this._mergeBasePath(service);
         this.resources[res.name] = service;
     }
 
     public createAll(resources: ResourceConfig[]): void{
         let mergeConfigIndex: number = resources.findIndex((value: ResourceConfig) => {
-            return value.name == MERGE_RESOURCE_NAME;
+            return value.name == BASE_RESOURCE_NAME;
         });
         if(mergeConfigIndex > -1){
-            this.mergeConfig = resources[mergeConfigIndex];
-            let _mergeConfig = Object.assign({}, this.mergeConfig);
-            _mergeConfig.basePath = _mergeConfig.basePath == null ? "" : _mergeConfig.basePath;
+            this.baseConfig = resources[mergeConfigIndex];
+            let _baseConfig = Object.assign({}, this.baseConfig);
+            _baseConfig.basePath = _baseConfig.basePath == null ? "" : _baseConfig.basePath;
             resources.splice(mergeConfigIndex, 1);
-            this.resources[MERGE_RESOURCE_NAME] = new ResourceService(this.http, _mergeConfig);
+            this.resources[BASE_RESOURCE_NAME] = new ResourceService(this.http, _baseConfig);
         }
 
         let defaultConfigIndex: number = resources.findIndex((value: ResourceConfig) => {
@@ -252,15 +260,13 @@ export class ResourceFactory{
         if(defaultConfigIndex > -1){
             this.defaultConfig = resources[defaultConfigIndex];
             resources.splice(defaultConfigIndex, 1);
-            ResourceFactory._mergeConfig(this.mergeConfig, this.defaultConfig);
+            ResourceFactory._mergeConfig(this.baseConfig, this.defaultConfig);
 
             let _defaultConfig = Object.assign({}, this.defaultConfig);
             _defaultConfig.basePath = _defaultConfig.basePath == null ? "" : _defaultConfig.basePath;
 
             let service: ResourceService =new ResourceService(this.http, _defaultConfig);
-            if(this.mergeConfig.basePath){
-                service.basePath = this.mergeConfig.basePath + service.basePath;
-            }
+            this._mergeBasePath(service);
             this.resources[DEFAULT_RESOURCE_NAME] = service;
         }
 
@@ -277,9 +283,18 @@ export class ResourceFactory{
         }
     }
 
+    private _mergeBasePath(service: ResourceService): void{
+        if(this.baseConfig.basePath){
+            this.baseConfig.basePath.replace("\\", "/");
+            let separator: string = !service.basePath.startsWith("/") && !this.baseConfig.basePath.endsWith("/") ? "/" : "";
+            service.basePath = this.baseConfig.basePath + separator + service.basePath;
+        }
+    }
+
     private static _mergeConfig(from: ResourceConfig, to: ResourceConfig): void{
         if(from){
             ResourceFactory._replaceParam(from, to, "isRelative");
+            ResourceFactory._replaceParam(from, to, "withCredentials");
 
             ResourceFactory._mergeAction(from.listAction, to.listAction);
             ResourceFactory._mergeAction(from.getAction, to.getAction);
@@ -329,7 +344,7 @@ export class ResourceFactory{
     }
 
     private static _replaceParam(from: any, to: any, param: string): void{
-        to[param] = to[param] == null && from[param] != null ? to[param] : from[param];
+        to[param] = to[param] == null && from[param] != null ? from[param] : to[param];
     }
 
     private static _copyRequestInterceptor(from: ResourceConfig | RequestAction, to: ResourceConfig | RequestAction){
@@ -379,6 +394,7 @@ export interface ResourceConfig{
     basePath?: string;
     headers?: Headers;
     isRelative?: boolean;
+    withCredentials?: boolean;
     listAction?: RequestAction;
     getAction?: RequestAction;
     insertAction?: RequestAction;
